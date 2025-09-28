@@ -1,58 +1,84 @@
 ```typescript
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { MailerService } from '@nestjs-modules/mailer';
-import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
-
-export interface EmailData {
-  to: string;
-  subject: string;
-  template: string;
-  context: any;
-}
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  private readonly maxRetries: number;
+  private readonly retryDelay: number;
 
   constructor(
     private readonly mailerService: MailerService,
-    @InjectQueue('email') private readonly emailQueue: Queue,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.maxRetries = this.configService.get<number>('EMAIL_MAX_RETRIES') || 3;
+    this.retryDelay = this.configService.get<number>('EMAIL_RETRY_DELAY') || 1000; // 1 second
+  }
 
   /**
-   * Adds an email to the queue for processing.
-   * @param {EmailData} data - The email data.
-   * @returns {Promise<void>}
+   * Sends an email with retry mechanism.
+   * @param {string} to - Recipient email address.
+   * @param {string} subject - Email subject.
+   * @param {string} template - Name of the email template.
+   * @param {Record<string, any>} context - Data to be passed to the template.
+   * @param {number} attempt - Current attempt number (used for recursion).
+   * @returns {Promise<boolean>} - True if the email was sent successfully, false otherwise.
    */
-  async addEmailToQueue(data: EmailData): Promise<void> {
+  async sendEmailWithRetry(
+    to: string,
+    subject: string,
+    template: string,
+    context: Record<string, any>,
+    attempt: number = 1,
+  ): Promise<boolean> {
     try {
-      await this.emailQueue.add('sendEmail', data);
-      this.logger.log(`Email added to queue for: ${data.to}`);
+      await this.mailerService.sendMail({
+        to: to,
+        subject: subject,
+        template: template,
+        context: context,
+      });
+
+      this.logger.log(`Email sent successfully to ${to}`);
+      return true;
     } catch (error) {
-      this.logger.error(`Failed to add email to queue: ${error.message}`, error.stack);
-      throw error;
+      this.logger.error(
+        `Failed to send email to ${to} (Attempt ${attempt}): ${error.message}`,
+        error.stack,
+      );
+
+      if (attempt <= this.maxRetries) {
+        this.logger.log(
+          `Retrying email to ${to} in ${this.retryDelay}ms (Attempt ${
+            attempt + 1
+          }/${this.maxRetries})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, this.retryDelay));
+        return this.sendEmailWithRetry(to, subject, template, context, attempt + 1);
+      } else {
+        this.logger.error(
+          `Failed to send email to ${to} after ${this.maxRetries} attempts.`,
+        );
+        return false;
+      }
     }
   }
 
   /**
-   * Sends an email using a template.
-   * @param {EmailData} data - The email data.
-   * @returns {Promise<void>}
+   * Sends a contact email.
+   * @param {string} to - Recipient email address.
+   * @param {string} subject - Email subject.
+   * @param {Record<string, any>} context - Data to be passed to the template.
+   * @returns {Promise<boolean>} - True if the email was sent successfully, false otherwise.
    */
-  async sendEmail(data: EmailData): Promise<void> {
-    try {
-      await this.mailerService.sendMail({
-        to: data.to,
-        subject: data.subject,
-        template: data.template,
-        context: data.context,
-      });
-      this.logger.log(`Email sent successfully to: ${data.to}`);
-    } catch (error) {
-      this.logger.error(`Failed to send email to ${data.to}: ${error.message}`, error.stack);
-      throw error;
-    }
+  async sendContactEmail(
+    to: string,
+    subject: string,
+    context: Record<string, any>,
+  ): Promise<boolean> {
+    return this.sendEmailWithRetry(to, subject, 'contact', context);
   }
 }
 ```
