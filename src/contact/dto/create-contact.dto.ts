@@ -1,49 +1,47 @@
 ```typescript
-import { IsEmail, IsNotEmpty, IsString, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsPhoneNumber, IsString, MaxLength } from 'class-validator';
 
 /**
  * Data Transfer Object (DTO) para criar um novo contato.
- * Define a estrutura de dados esperada para receber informações de contato.
+ * Define a estrutura de dados esperada para a criação de um contato
+ * e inclui regras de validação para garantir a integridade dos dados.
  */
 export class CreateContactDto {
   /**
    * Nome do contato.
-   * @example John Doe
+   * @example "João da Silva"
    */
-  @ApiProperty({ example: 'John Doe', description: 'Nome completo do contato.' })
   @IsString()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(100)
   name: string;
 
   /**
-   * Email do contato.
-   * @example john.doe@example.com
+   * Endereço de e-mail do contato.
+   * Deve ser um endereço de e-mail válido.
+   * @example "joao.silva@example.com"
    */
-  @ApiProperty({ example: 'john.doe@example.com', description: 'Endereço de email do contato.' })
   @IsEmail()
   @IsNotEmpty()
-  @MaxLength(255)
+  @MaxLength(100)
   email: string;
 
   /**
-   * Assunto da mensagem.
-   * @example Feedback sobre o produto
+   * Número de telefone do contato.
+   * Deve ser um número de telefone válido.
+   * @example "+5511999999999"
    */
-  @ApiProperty({ example: 'Feedback sobre o produto', description: 'Assunto da mensagem.' })
-  @IsString()
+  @IsPhoneNumber('BR')
   @IsNotEmpty()
-  @MaxLength(255)
-  subject: string;
+  phone: string;
 
   /**
-   * Mensagem do contato.
-   * @example Gostaria de dar um feedback sobre o seu produto...
+   * Mensagem opcional do contato.
+   * @example "Gostaria de saber mais sobre seus serviços."
    */
-  @ApiProperty({ example: 'Gostaria de dar um feedback sobre o seu produto...', description: 'Corpo da mensagem.' })
   @IsString()
-  @IsNotEmpty()
-  message: string;
+  @IsOptional()
+  @MaxLength(500)
+  message?: string;
 }
 ```
