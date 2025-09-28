@@ -1,56 +1,92 @@
 ```typescript
-import { Injectable } from '@nestjs/common';
-import { MailerService } from '@nestjs-modules/mailer';
-import { ContactDto } from './dto/contact.dto';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { CreateContactDto } from './dto/create-contact.dto';
+import { Contact } from './entities/contact.entity';
+import { v4 as uuidv4 } from 'uuid';
 
-/**
- * Serviço para lidar com operações relacionadas a contatos, como envio de e-mails.
- */
 @Injectable()
 export class ContactService {
-  private readonly recipientEmail: string;
+  private readonly logger = new Logger(ContactService.name);
+
+  constructor(@InjectQueue('email') private readonly emailQueue: Queue) {}
 
   /**
-   * Construtor da classe ContactService.
-   * @param mailerService Serviço de e-mail do NestJS Mailer.
-   * @param configService Serviço de configuração do NestJS.
+   * Creates a new contact and queues an email to be sent.
+   * @param createContactDto - The data for creating the contact.
+   * @returns The created contact.
    */
-  constructor(
-    private readonly mailerService: MailerService,
-    private readonly configService: ConfigService,
-  ) {
-    this.recipientEmail = this.configService.get<string>('CONTACT_EMAIL');
-    if (!this.recipientEmail) {
-      throw new Error(
-        'O e-mail do destinatário (CONTACT_EMAIL) não está configurado.',
-      );
-    }
+  async create(createContactDto: CreateContactDto): Promise<Contact> {
+    const contact: Contact = {
+      id: uuidv4(),
+      ...createContactDto,
+      createdAt: new Date(),
+    };
+
+    this.logger.log(`Creating contact with email: ${contact.email}`);
+
+    await this.emailQueue.add('send-email', {
+      to: contact.email,
+      subject: 'Thank you for contacting us!',
+      body: `Dear ${contact.name},\n\nThank you for contacting us. We will get back to you soon.\n\nSincerely,\nThe Team`,
+    });
+
+    this.logger.log(`Email job added to queue for: ${contact.email}`);
+
+    return contact;
   }
 
   /**
-   * Envia um e-mail com os dados do contato.
-   * @param contactDto DTO contendo os dados do contato.
-   * @returns Uma Promise que resolve quando o e-mail é enviado com sucesso.
-   * @throws Error se o envio do e-mail falhar.
+   * Retrieves all contacts.  Currently, this returns mock data as persistence is not implemented.
+   * @returns An array of contacts.
    */
-  async sendContactEmail(contactDto: ContactDto): Promise<void> {
-    try {
-      await this.mailerService.sendMail({
-        to: this.recipientEmail,
-        subject: `Novo contato de: ${contactDto.name}`,
-        template: 'contact', // O nome do template Handlebars
-        context: {
-          name: contactDto.name,
-          email: contactDto.email,
-          message: contactDto.message,
-          phone: contactDto.phone,
-        },
-      });
-    } catch (error) {
-      console.error('Erro ao enviar o e-mail de contato:', error);
-      throw new Error('Falha ao enviar o e-mail de contato.');
-    }
+  async findAll(): Promise<Contact[]> {
+    // TODO: Implement actual database retrieval.
+    return [
+      {
+        id: uuidv4(),
+        name: 'John Doe',
+        email: 'john.doe@example.com',
+        message: 'Hello, I have a question.',
+        createdAt: new Date(),
+      },
+      {
+        id: uuidv4(),
+        name: 'Jane Smith',
+        email: 'jane.smith@example.com',
+        message: 'Inquiry about your services.',
+        createdAt: new Date(),
+      },
+    ];
+  }
+
+  /**
+   * Retrieves a contact by ID. Currently, this returns mock data as persistence is not implemented.
+   * @param id - The ID of the contact to retrieve.
+   * @returns The contact with the given ID, or undefined if not found.
+   */
+  async findOne(id: string): Promise<Contact | undefined> {
+    // TODO: Implement actual database retrieval.
+    const mockContact: Contact = {
+      id: id,
+      name: 'John Doe',
+      email: 'john.doe@example.com',
+      message: 'Hello, I have a question.',
+      createdAt: new Date(),
+    };
+
+    return mockContact;
+  }
+
+  /**
+   * Removes a contact by ID.  Currently, this does nothing as persistence is not implemented.
+   * @param id - The ID of the contact to remove.
+   * @returns A promise that resolves when the contact is removed.
+   */
+  async remove(id: string): Promise<void> {
+    // TODO: Implement actual database deletion.
+    this.logger.log(`Removing contact with id: ${id}`);
   }
 }
 ```
